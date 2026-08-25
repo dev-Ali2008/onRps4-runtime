@@ -1,0 +1,47 @@
+--- a/src/core/libraries/libc_internal/libc_internal_io.cpp
++++ b/src/core/libraries/libc_internal/libc_internal_io.cpp
+@@ -4,6 +4,7 @@
+ #include <cstdarg>
+ #include <cstdio>
+ #include <map>
++#include <set>
+ 
+ #include <common/va_ctx.h>
+ #include "common/alignment.h"
+@@ -26,6 +27,13 @@
+ }
+ 
+ std::map<s32, OrbisFILE*> g_files{};
++
++// Buffers we allocated ourselves in internal__Frprep (host malloc). Only
++// pointers present here may ever be freed: the FILE struct is exposed to
++// the application and games can replace _Buf with their own storage while
++// stale mode bits still claim libc ownership. Freeing such a pointer
++// aborts the whole process with "munmap_chunk(): invalid pointer".
++static std::set<u8*> g_owned_buffers{};
+ // Constants for tracking accurate file indexes.
+ // Since the file struct is exposed to the application, accuracy is important.
+ static constexpr s32 g_initial_files = 5;
+@@ -350,6 +358,7 @@
+             file->_Buf = file_buf;
+             file->_Bend = file_buf + 1;
+         } else {
++            g_owned_buffers.emplace(new_buffer);
+             file->_Mode = file->_Mode | 0x40;
+             file->_Buf = new_buffer;
+             file->_Bend = new_buffer + 0x10000;
+@@ -471,7 +480,13 @@
+         std::scoped_lock lk{g_file_mtx};
+         if ((file->_Mode & 0x40) != 0 && file->_Buf != nullptr &&
+             file->_Buf != reinterpret_cast<u8*>(&file->_Cbuf)) {
+-            std::free(file->_Buf);
++            // Free only buffers this HLE actually allocated (see
++            // g_owned_buffers). Anything else belongs to the guest.
++            if (auto owned = g_owned_buffers.find(file->_Buf);
++                owned != g_owned_buffers.end()) {
++                g_owned_buffers.erase(owned);
++                std::free(file->_Buf);
++            }
+         }
+         file->_Buf = nullptr;
+         s32 close_result = Libraries::Kernel::posix_close(file->_Handle);

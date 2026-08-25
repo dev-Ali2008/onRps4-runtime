@@ -39,6 +39,10 @@ elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch
     echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
 fi
 
+# Bachata patches use paths relative to the shadPS4 source root, so they
+# must be applied inside runtime/sources/shadps4 (a plain git -C project_root
+# silently skipped every one of them in CI).
+shadps4_src_dir="$project_root/runtime/sources/shadps4"
 for bachata_patch in \
   "$project_root/runtime/patches/bachata-ngs2-waveform-parse.patch" \
   "$project_root/runtime/patches/bachata-6gb-memory-autotune.patch" \
@@ -48,11 +52,12 @@ for bachata_patch in \
   "$project_root/runtime/patches/bachata-fios-open-create.patch" \
   "$project_root/runtime/patches/bachata-liverpool-stall-backoff.patch" \
   "$project_root/runtime/patches/bachata-libcinternal-fclose-guard.patch" \
+  "$project_root/runtime/patches/shadps4-libc-fclose-buffer-ownership.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
-  if git -C "$project_root" apply --check "$bachata_patch"; then
-    git -C "$project_root" apply "$bachata_patch"
-  elif ! git -C "$project_root" apply --reverse --check "$bachata_patch"; then
+  if git -C "$shadps4_src_dir" apply --check "$bachata_patch"; then
+    git -C "$shadps4_src_dir" apply "$bachata_patch"
+  elif ! git -C "$shadps4_src_dir" apply --reverse --check "$bachata_patch"; then
     echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly (skipping...)" >&2
   fi
 done

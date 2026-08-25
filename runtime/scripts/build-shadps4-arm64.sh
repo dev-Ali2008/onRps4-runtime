@@ -36,9 +36,9 @@ for bachata_patch in \
   "$project_root/runtime/patches/bachata-libcinternal-fclose-guard.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
-  if git -C "$project_root" apply --check "$bachata_patch"; then
-    git -C "$project_root" apply "$bachata_patch"
-  elif ! git -C "$project_root" apply --reverse --check "$bachata_patch"; then
+  if git -C "$project_root/runtime/sources/shadps4" apply --check "$bachata_patch"; then
+    git -C "$project_root/runtime/sources/shadps4" apply "$bachata_patch"
+  elif ! git -C "$project_root/runtime/sources/shadps4" apply --reverse --check "$bachata_patch"; then
     echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly (skipping...)" >&2
   fi
 done
