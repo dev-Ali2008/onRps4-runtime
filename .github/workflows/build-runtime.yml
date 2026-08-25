@@ -37,6 +37,11 @@ jobs:
       - name: Install Debian runtime build dependencies
         run: bash runtime/scripts/install-debian-runtime-deps.sh
 
+      - name: Clean partial submodule clones
+        run: |
+          find runtime/sources/shadps4/externals -maxdepth 1 -type d -empty -delete || true
+          rm -rf runtime/sources/shadps4/externals/zlib-ng
+
       - name: Populate shadPS4 externals submodules
         run: python3 runtime/scripts/populate-shadps4-submodules.py runtime/sources/shadps4
 

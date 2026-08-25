@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Populate empty shadPS4 externals submodule dirs from .gitmodules.
-
-The committed runtime/sources/shadps4 tree ships without .git, so
-`git submodule update --init` cannot work. This clones every externals/*
-entry from its .gitmodules URL (branch HEAD, shallow) when the directory
-is still empty. Already-populated dirs (aacdec, gcn, stb, ...) are kept.
-"""
+"""Populate empty shadPS4 externals submodule dirs from .gitmodules."""
 import configparser
 import os
 import subprocess
@@ -18,23 +12,39 @@ def main():
         raise SystemExit(f"missing {gitmodules}")
     cp = configparser.ConfigParser(strict=False)
     cp.read(gitmodules)
-    populated = 0
+    populated = failed = 0
     for sec in cp.sections():
         path = cp[sec].get("path", "")
         url = cp[sec].get("url", "")
-        branch = cp[sec].get("branch") or "HEAD"
+        branch = (cp[sec].get("branch") or "").strip()
         if not url or not path.startswith("externals/"):
             continue
         target = os.path.join(root, path)
         if os.path.isdir(target) and os.listdir(target):
             continue
-        print(f"[externals] cloning {url} ({branch}) -> {path}")
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "-b", branch, url, target],
-            check=True,
-        )
-        populated += 1
-    print(f"[externals] populated {populated} dir(s)")
+        print(f"[externals] cloning {url} ({branch or 'default'}) -> {path}", flush=True)
+        cmd = ["git", "clone", "--depth", "1"]
+        # only pass -b for a real branch name; HEAD/main fall back to default
+        use_branch = branch not in ("", "HEAD", "main")
+        if use_branch:
+            cmd += ["-b", branch]
+        cmd += [url, target]
+        try:
+            subprocess.run(cmd, check=True)
+            populated += 1
+        except subprocess.CalledProcessError as error:
+            # retry once without any -b (remote default branch)
+            subprocess.run(["rm", "-rf", target], check=False)
+            try:
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", url, target], check=True
+                )
+                populated += 1
+            except subprocess.CalledProcessError:
+                failed += 1
+                print(f"[externals] FAILED to clone {path}: {error}", flush=True)
+                continue
+    print(f"[externals] populated={populated} failed={failed}", flush=True)
 
 if __name__ == "__main__":
     main()
