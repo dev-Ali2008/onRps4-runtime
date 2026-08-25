@@ -30,7 +30,7 @@ diff --git a/src/wrapped/wrappedvulkan_private.h b/src/wrapped/wrappedvulkan_pri
 +GO(vkCmdEndPerTileExecutionQCOM, vFpp)
  GO(vkGetDynamicRenderingTilePropertiesQCOM, iFppp)
  GO(vkGetFramebufferTilePropertiesQCOM, iFpppp)
-@@ -1147,4 +1151,19 @@ GO(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM, iFpupppp)
+@@ -1147,4 +1151,24 @@ GO(vkGetPhysicalDeviceQueueFamilyDataGraphOpticalFlowImageFormatsARM, iFpupppp)
  // VK_NV_push_constant_bank
  // no new functions
  
@@ -48,5 +48,10 @@ diff --git a/src/wrapped/wrappedvulkan_private.h b/src/wrapped/wrappedvulkan_pri
 +GO(vkGetClusterAccelerationStructureBuildSizesNV, vFppp)
 +GO(vkGetExternalComputeQueueDataNV, vFUpp)
 +GO(vkGetPartitionedAccelerationStructuresBuildSizesNV, vFppp)
++
++// VK_QCOM_queue_perf_hint (exposed by Turnip; missing wrapper caused an
++// endless "no wrapper for vkQueueSetPerfHintQCOM" loop with no presents)
++GO(vkQueueSetPerfHintQCOM, iFpp)
++GO(vkGetPhysicalDeviceQueuePerfHintPropertiesQCOM, vFpp)
 +
  // Layer stuffs

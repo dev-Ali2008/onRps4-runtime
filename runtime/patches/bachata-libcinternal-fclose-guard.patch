@@ -1,0 +1,53 @@
+--- a/src/core/libraries/libc_internal/libc_internal_io.cpp
++++ b/src/core/libraries/libc_internal/libc_internal_io.cpp
+@@ -30,6 +30,17 @@
+ // Since the file struct is exposed to the application, accuracy is important.
+ static constexpr s32 g_initial_files = 5;
+ static constexpr s32 g_max_files = 0x100;
++
++// True only when the FILE object was allocated by this HLE (via internal__Fofind).
++// Games may hand us FILE objects owned by a real sce_module libc; freeing those
++// on the host heap aborts with "munmap_chunk(): invalid pointer".
++static bool IsManagedFile(OrbisFILE* file) {
++    if (file == nullptr || file->_Idx < 0 || file->_Idx >= g_max_files) {
++        return false;
++    }
++    const auto it = g_files.find(file->_Idx);
++    return it != g_files.end() && it->second == file;
++}
+ 
+ OrbisFILE* PS4_SYSV_ABI internal__Fofind() {
+     u64 index = g_initial_files;
+@@ -430,7 +441,7 @@
+     file->_WWend = cbuf_ptr;
+     file->_Rback = cbuf_ptr;
+     file->_WRback = &file->unk1;
+-    if (trunc_mode < 0) {
++    if (trunc_mode < 0 && IsManagedFile(file)) {
+         // Remove file from vector
+         g_files.erase(file->_Idx);
+         internal__Mtxdst(&file->_Mutex);
+@@ -444,6 +455,13 @@
+     }
+ 
+     LOG_INFO(Lib_LibcInternal, "called, file handle {:#x}", file->_Handle);
++    if (!IsManagedFile(file)) {
++        // Foreign FILE object (e.g. allocated by a real sce_module libc):
++        // never free or rewrite guest-owned memory here.
++        std::scoped_lock lk{g_file_mtx};
++        *Libraries::Kernel::__Error() = POSIX_EBADF;
++        return -1;
++    }
+     if ((file->_Mode & 3) == 0 || file->_Handle < 0) {
+         std::scoped_lock lk{g_file_mtx};
+         internal__Fofree(file);
+@@ -451,7 +469,8 @@
+     } else {
+         s32 fflush_result = internal_fflush(file);
+         std::scoped_lock lk{g_file_mtx};
+-        if ((file->_Mode & 0x40) != 0) {
++        if ((file->_Mode & 0x40) != 0 && file->_Buf != nullptr &&
++            file->_Buf != reinterpret_cast<u8*>(&file->_Cbuf)) {
+             std::free(file->_Buf);
+         }
+         file->_Buf = nullptr;

@@ -47,6 +47,7 @@ for bachata_patch in \
   "$project_root/runtime/patches/bachata-clock-lazy-init.patch" \
   "$project_root/runtime/patches/bachata-fios-open-create.patch" \
   "$project_root/runtime/patches/bachata-liverpool-stall-backoff.patch" \
+  "$project_root/runtime/patches/bachata-libcinternal-fclose-guard.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
   if git -C "$project_root" apply --check "$bachata_patch"; then
@@ -56,7 +57,8 @@ do
   fi
 done
 
-cmake -S "$project_root" -B "$build_dir" -G Ninja \
+SHADPS4_SRC="$project_root/runtime/sources/shadps4"
+cmake -S "$SHADPS4_SRC" -B "$build_dir" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \

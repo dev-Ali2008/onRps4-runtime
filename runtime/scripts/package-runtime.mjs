@@ -269,49 +269,56 @@ for (const lib of readFileSync(shadps4Arm64Needed, "utf8").trim().split("\n")) {
 
 copy(hostBox64Binary, join(hostDir, "box64"), 0o755);
 
-// Vortek guest ICD (aarch64 glibc client) — optional until built, required when present in lock.
+// Vortek guest ICD (aarch64 glibc client) — REMOVED from the shipped runtime.
+// Kept strictly opt-in: only packaged when a vortek-client stage already exists.
 const vortekStage = resolve(projectRoot, "runtime/build/vortek-client-stage");
 const vortekLib = join(vortekStage, "host/lib/libvulkan_vortek.so");
 const vortekIcd = join(vortekStage, "host/vulkan/icd.d/vortek.json");
-const vortekLicense = join(vortekStage, "usr/share/bachata/vortek/LICENSE");
-const vortekSourceMeta = join(vortekStage, "usr/share/bachata/vortek/SOURCE.txt");
-if (!existsSync(vortekLib) || !existsSync(vortekIcd)) {
-  fail("Vortek client stage missing. Run runtime/scripts/build-vortek-client.sh first.");
+let vortekPackaged = false;
+if (existsSync(vortekLib) && existsSync(vortekIcd)) {
+  vortekPackaged = true;
+  const vortekLicense = join(vortekStage, "usr/share/bachata/vortek/LICENSE");
+  const vortekSourceMeta = join(vortekStage, "usr/share/bachata/vortek/SOURCE.txt");
+  const vortekIcdText = readFileSync(vortekIcd, "utf8");
+  if (vortekIcdText.includes("com.winlator")) fail("Vortek ICD contains Winlator path");
+  const vortekIcdJson = JSON.parse(vortekIcdText);
+  if (vortekIcdJson?.ICD?.api_version !== "1.3.0") {
+    fail(`Vortek ICD api_version must be 1.3.0, got ${vortekIcdJson?.ICD?.api_version}`);
+  }
+  // Task 8: truthful 1.3.0 only — reject 1.4+ over-advertisement.
+  if (/^1\.(4|5|6)\./.test(String(vortekIcdJson?.ICD?.api_version || ""))) {
+    fail("Vortek ICD must not over-advertise beyond approved 1.3.0");
+  }
+  mkdirSync(join(hostDir, "lib"), { recursive: true });
+  mkdirSync(join(hostDir, "vulkan/icd.d"), { recursive: true });
+  mkdirSync(join(rootfs, "usr/share/bachata/vortek"), { recursive: true });
+  copy(vortekLib, join(hostDir, "lib/libvulkan_vortek.so"), 0o755);
+  copy(vortekIcd, join(hostDir, "vulkan/icd.d/vortek.json"), 0o644);
+  copy(vortekLicense, join(rootfs, "usr/share/bachata/vortek/LICENSE"), 0o644);
+  copy(vortekSourceMeta, join(rootfs, "usr/share/bachata/vortek/SOURCE.txt"), 0o644);
+  console.log("[Bachata.Vortek.Build] packaged host/lib/libvulkan_vortek.so and host/vulkan/icd.d/vortek.json");
+} else {
+  console.log("[Bachata.Vortek.Build] no vortek stage found — packaging WITHOUT vortek (removed from runtime)");
 }
-const vortekIcdText = readFileSync(vortekIcd, "utf8");
-if (vortekIcdText.includes("com.winlator")) fail("Vortek ICD contains Winlator path");
-const vortekIcdJson = JSON.parse(vortekIcdText);
-if (vortekIcdJson?.ICD?.api_version !== "1.3.0") {
-  fail(`Vortek ICD api_version must be 1.3.0, got ${vortekIcdJson?.ICD?.api_version}`);
-}
-// Task 8: truthful 1.3.0 only — reject 1.4+ over-advertisement.
-if (/^1\.(4|5|6)\./.test(String(vortekIcdJson?.ICD?.api_version || ""))) {
-  fail("Vortek ICD must not over-advertise beyond approved 1.3.0");
-}
-mkdirSync(join(hostDir, "lib"), { recursive: true });
-mkdirSync(join(hostDir, "vulkan/icd.d"), { recursive: true });
-mkdirSync(join(rootfs, "usr/share/bachata/vortek"), { recursive: true });
-copy(vortekLib, join(hostDir, "lib/libvulkan_vortek.so"), 0o755);
-copy(vortekIcd, join(hostDir, "vulkan/icd.d/vortek.json"), 0o644);
-copy(vortekLicense, join(rootfs, "usr/share/bachata/vortek/LICENSE"), 0o644);
-copy(vortekSourceMeta, join(rootfs, "usr/share/bachata/vortek/SOURCE.txt"), 0o644);
-console.log("[Bachata.Vortek.Build] packaged host/lib/libvulkan_vortek.so and host/vulkan/icd.d/vortek.json");
 
 // Task 5 transport probe binaries (packaged for on-device HOST_GLIBC integration tests).
+// Vortek-derived probes are skipped together with the vortek client.
 const vortekProbeSrc = resolve(projectRoot, "runtime/tests/vortek_probe/vortek_probe.c");
-const vortekProbeDir = join(rootfs, "bin/probes");
-mkdirSync(vortekProbeDir, { recursive: true });
-const vortekProbeX64 = join(vortekProbeDir, "vortek_probe_x86_64");
-const vortekProbeA64 = join(vortekProbeDir, "vortek_probe_aarch64");
-const vortekProbeCommonFlags = [
-  "-O2", "-s", "-fno-ident", "-Wl,--build-id=none",
-  "-I", resolve(projectRoot, "runtime/sources/mesa/include"),
-  "-DVK_USE_PLATFORM_XLIB_KHR",
-  vortekProbeSrc, "-ldl", "-lX11",
-];
-run("x86_64-linux-gnu-gcc", [...vortekProbeCommonFlags, "-o", vortekProbeX64]);
-run("aarch64-linux-gnu-gcc", [...vortekProbeCommonFlags, "-o", vortekProbeA64]);
-console.log("[Bachata.Vortek.Build] packaged bin/probes/vortek_probe_{x86_64,aarch64}");
+if (existsSync(vortekLib) && existsSync(vortekProbeSrc)) {
+  const vortekProbeDir = join(rootfs, "bin/probes");
+  mkdirSync(vortekProbeDir, { recursive: true });
+  const vortekProbeX64 = join(vortekProbeDir, "vortek_probe_x86_64");
+  const vortekProbeA64 = join(vortekProbeDir, "vortek_probe_aarch64");
+  const vortekProbeCommonFlags = [
+    "-O2", "-s", "-fno-ident", "-Wl,--build-id=none",
+    "-I", resolve(projectRoot, "runtime/sources/mesa/include"),
+    "-DVK_USE_PLATFORM_XLIB_KHR",
+    vortekProbeSrc, "-ldl", "-lX11",
+  ];
+  run("x86_64-linux-gnu-gcc", [...vortekProbeCommonFlags, "-o", vortekProbeX64]);
+  run("aarch64-linux-gnu-gcc", [...vortekProbeCommonFlags, "-o", vortekProbeA64]);
+  console.log("[Bachata.Vortek.Build] packaged bin/probes/vortek_probe_{x86_64,aarch64}");
+}
 
 // Copy host libs to jniLibs
 mkdirSync(nativeOutputDir, { recursive: true });
@@ -358,7 +365,9 @@ const manifest = {
   runtimeVersion,
   protocolVersion: 1,
   distribution: "debian",
-  components: componentLock.components.map(({ name, revision }) => ({ name, revision })),
+  components: componentLock.components
+    .filter(({ name }) => vortekPackaged || !name.startsWith("vortek-"))
+    .map(({ name, revision }) => ({ name, revision })),
   files: files.map(({ path, bytes }) => ({ path, size: bytes.length, sha256: sha256(bytes) })),
 };
 
