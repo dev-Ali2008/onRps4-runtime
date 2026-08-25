@@ -10,8 +10,8 @@ for tool in cmake ninja clang clang++ readelf; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
 done
 
-if [ "${FAST_FDROID_BUILD:-1}" = "1" ]; then
-  echo "Using fast x86_64 probe stub for F-Droid CI build"
+if [ "${FAST_FDROID_BUILD:-0}" = "1" ]; then
+  echo "Using fast x86_64 probe stub because FAST_FDROID_BUILD=1"
   mkdir -p "$stage_dir/bin"
   cat <<'EOF' > "$stage_dir/stub.c"
 int main(void) { return 0; }

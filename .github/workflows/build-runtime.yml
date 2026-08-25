@@ -46,11 +46,13 @@ jobs:
       - name: Populate shadPS4 externals submodules
         run: python3 runtime/scripts/populate-shadps4-submodules.py runtime/sources/shadps4
 
-      - name: Build runtime (box64 + shadps4 x86_64/arm64 + stage + package)
+      - name: Build runtime (box64 + shadps4 x86_64/arm64 + Vortek + stage + package)
+        env:
+          FAST_FDROID_BUILD: "0"
         run: bash runtime/scripts/build-runtime-debian.sh app/src/main/assets/runtime
-
       - name: Verify manifest ↔ zip consistency
-        run: python3 runtime/tests/verify-packaged-runtime.py app/src/main/assets/runtime --no-vortek
+        run: python3 runtime/tests/verify-packaged-runtime.py app/src/main/assets/runtime
+
 
       - uses: actions/upload-artifact@v4
         with:

@@ -269,8 +269,8 @@ for (const lib of readFileSync(shadps4Arm64Needed, "utf8").trim().split("\n")) {
 
 copy(hostBox64Binary, join(hostDir, "box64"), 0o755);
 
-// Vortek guest ICD (aarch64 glibc client) — REMOVED from the shipped runtime.
-// Kept strictly opt-in: only packaged when a vortek-client stage already exists.
+// Vortek guest ICD (aarch64 glibc client) — packaged into the full runtime.
+// The build orchestration creates the stage before packaging.
 const vortekStage = resolve(projectRoot, "runtime/build/vortek-client-stage");
 const vortekLib = join(vortekStage, "host/lib/libvulkan_vortek.so");
 const vortekIcd = join(vortekStage, "host/vulkan/icd.d/vortek.json");
