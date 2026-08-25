@@ -5,6 +5,31 @@ import os
 import subprocess
 import sys
 
+
+def populate_nested_submodules(target, path):
+    if not os.path.exists(os.path.join(target, ".git")):
+        return True
+    try:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                target,
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+                "--depth",
+                "1",
+            ],
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as error:
+        print(f"[externals] FAILED nested submodules for {path}: {error}", flush=True)
+        return False
+
+
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else "runtime/sources/shadps4"
     gitmodules = os.path.join(root, ".gitmodules")
@@ -21,6 +46,8 @@ def main():
             continue
         target = os.path.join(root, path)
         if os.path.isdir(target) and os.listdir(target):
+            if not populate_nested_submodules(target, path):
+                failed += 1
             continue
         print(f"[externals] cloning {url} ({branch or 'default'}) -> {path}", flush=True)
         cmd = ["git", "clone", "--depth", "1"]
@@ -44,7 +71,10 @@ def main():
                 failed += 1
                 print(f"[externals] FAILED to clone {path}: {error}", flush=True)
                 continue
+        if not populate_nested_submodules(target, path):
+            failed += 1
     print(f"[externals] populated={populated} failed={failed}", flush=True)
+
 
 if __name__ == "__main__":
     main()
