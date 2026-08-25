@@ -4,6 +4,9 @@ set -euo pipefail
 project_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$project_root"
 
+# GitHub Actions mounts the workspace with a different owner inside the container.
+git config --global --add safe.directory "$project_root"
+
 # Box64 is an external pinned component and is not committed in the repository.
 bash runtime/scripts/checkout-component.sh \
   box64 \
