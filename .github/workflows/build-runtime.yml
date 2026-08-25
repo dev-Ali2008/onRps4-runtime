@@ -15,6 +15,7 @@ on:
       - "runtime/patches/**"
       - "runtime/scripts/**"
       - "runtime/sources/**"
+      - "runtime/probes/**"
       - ".github/workflows/build-runtime.yml"
 
 jobs:
