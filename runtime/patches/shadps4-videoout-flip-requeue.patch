@@ -1,0 +1,31 @@
+--- a/src/core/libraries/videoout/driver.cpp
++++ b/src/core/libraries/videoout/driver.cpp
+@@ -299,6 +299,9 @@
+ 
+ void VideoOutDriver::DrawBlankFrame() {
+     const auto empty_frame = presenter->PrepareBlankFrame(false);
++    if (empty_frame == nullptr) {
++        return; // presentation busy; next vblank retries
++    }
+     presenter->Present(empty_frame);
+ }
+ 
+@@ -365,6 +368,18 @@
+             const auto& group = port->groups[buffer.group_index];
+             frame = presenter->PrepareFrame(group, buffer.address_left);
+         }
++    }
++
++    if (frame == nullptr) {
++        // Presenter could not hand us a frame without blocking (previous
++        // presentation still in flight). Re-enqueue this flip instead of
++        // pushing a null frame into the present queue: PM4 processing keeps
++        // running and the flip is retried on the next GPU dispatch tick.
++        liverpool->SendCommand([=, this]() {
++            std::this_thread::sleep_for(std::chrono::milliseconds(2));
++            SubmitFlipInternal(port, index, flip_arg, is_eop);
++        });
++        return;
+     }
+ 
+     if (queue_traces.fetch_add(1, std::memory_order_relaxed) < 32) {

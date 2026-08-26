@@ -1,0 +1,40 @@
+--- a/src/core/linker.cpp
++++ b/src/core/linker.cpp
+@@ -2,6 +2,8 @@
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
+ #include "common/alignment.h"
++#include <array>
++#include <string_view>
+ #include "common/arch.h"
+ #include "common/assert.h"
+ #include "common/elf_info.h"
+@@ -789,7 +791,27 @@
+     const auto aeronid = AeroLib::FindByNid(sr.name.c_str());
+     if (sym_type == Loader::SymbolType::Object) {
+         return_info->name = aeronid ? aeronid->name : "Unknown object";
+-        return_info->virtual_address = 0;
++        // Data imports must land in readable, process-lifetime memory.
++        // Returning 0 left the guest relocation targeting NULL, and any
++        // module touching such an import faulted instantly (CUSA27428 died
++        // reading address 0x10 right after loading its NP toolkit plugins).
++        // Hand out a deterministic slot inside a zero-filled scratch buffer
++        // instead: same NID -> same address, separate NIDs stay separated,
++        // reads observe zeros exactly like an untouched BSS object would.
++        {
++            static alignas(64) std::array<u8, 0x10000> unresolved_object_scratch{};
++            const std::string_view nid{sr.name};
++            u64 hash = 1469598103934665603ull; // FNV-1a 64
++            for (const char c : nid) {
++                hash ^= static_cast<u8>(c);
++                hash *= 1099511628211ull;
++            }
++            constexpr u64 kSlotSize = 0x100;
++            constexpr u64 kUsable = sizeof(unresolved_object_scratch) - kSlotSize;
++            const auto offset = static_cast<std::size_t>(hash % kUsable);
++            return_info->virtual_address =
++                reinterpret_cast<VAddr>(unresolved_object_scratch.data()) + offset;
++        }
+ #ifdef SHADPS4_ENABLE_FEX_GUEST_CPU
+     } else if (sym_type == Loader::SymbolType::Function) {
+         return_info->name = aeronid ? aeronid->name : "Unknown function";

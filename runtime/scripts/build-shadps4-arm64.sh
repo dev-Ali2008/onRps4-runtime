@@ -34,6 +34,11 @@ for bachata_patch in \
   "$project_root/runtime/patches/bachata-fios-open-create.patch" \
   "$project_root/runtime/patches/bachata-liverpool-stall-backoff.patch" \
   "$project_root/runtime/patches/bachata-libcinternal-fclose-guard.patch" \
+  "$project_root/runtime/patches/shadps4-libc-fclose-buffer-ownership.patch" \
+  "$project_root/runtime/patches/shadps4-kernel-release-flexible-memory.patch" \
+  "$project_root/runtime/patches/shadps4-linker-fex-object-resolution.patch" \
+  "$project_root/runtime/patches/shadps4-vk-presenter-nonblocking-fence.patch" \
+  "$project_root/runtime/patches/shadps4-videoout-flip-requeue.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
   if git -C "$project_root/runtime/sources/shadps4" apply --check "$bachata_patch"; then

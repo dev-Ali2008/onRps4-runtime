@@ -1,0 +1,108 @@
+--- a/src/video_core/renderer_vulkan/vk_presenter.cpp
++++ b/src/video_core/renderer_vulkan/vk_presenter.cpp
+@@ -631,28 +631,10 @@
+ 
+     Frame* frame = last_submit_frame;
+ 
+-    // 200ms timeout instead of 10s. A stalled PrepareLastFrame blocks the entire
+-    // render pipeline; on Snapdragon 855 this causes visible frame drops.
+-    static constexpr u64 kPrepareFenceTimeoutNs = 200'000'000ULL; // 200ms
+-    static constexpr int kPrepareMaxRetries = 2;
+-    for (int retry = 0; retry < kPrepareMaxRetries; ++retry) {
+-        vk::Result result = instance.GetDevice().waitForFences(frame->present_done, false,
+-                                                               kPrepareFenceTimeoutNs);
+-        if (result == vk::Result::eSuccess) {
+-            break;
+-        }
+-        if (result == vk::Result::eTimeout) {
+-            LOG_WARNING(Render_Vulkan, "waitForFences timeout in PrepareLastFrame (retry {}/{})",
+-                        retry + 1, kPrepareMaxRetries);
+-            continue;
+-        }
+-        if (result == vk::Result::eErrorDeviceLost) {
+-            LOG_CRITICAL(Render_Vulkan, "Device lost during waiting for a frame (PrepareLastFrame)");
+-            break;
+-        }
+-        LOG_ERROR(Render_Vulkan, "Unexpected waitForFences result in PrepareLastFrame: {}",
+-                  vk::to_string(result));
+-        break;
++    // Zero-timeout poll: DrawLastFrame() already tolerates a null frame, so
++    // skipping the reuse attempt is always safe and keeps this thread free.
++    if (instance.GetDevice().waitForFences(frame->present_done, false, 0) != vk::Result::eSuccess) {
++        return nullptr;
+     }
+ 
+     auto& scheduler = flip_scheduler;
+@@ -1196,38 +1178,42 @@
+                  frame ? frame->ready_tick : 0);
+     }
+ 
+-    // Wait with a 100ms timeout instead of infinite. If the fence doesn't signal
+-    // in 100ms the GPU is likely stalled; drop this frame to avoid blocking the
+-    // guest entirely. On Snapdragon 855 an infinite wait can freeze the whole
+-    // emulator for seconds during scene transitions.
+-    static constexpr u64 kFenceWaitTimeoutNs = 100'000'000ULL; // 100ms
+-    static constexpr int kMaxFenceWaitRetries = 3;
+-    for (int retry = 0; retry < kMaxFenceWaitRetries; ++retry) {
+-        result = device.waitForFences(frame->present_done, false, kFenceWaitTimeoutNs);
+-        if (result == vk::Result::eSuccess) {
+-            break;
+-        }
+-        if (result == vk::Result::eErrorDeviceLost) {
+-            static std::atomic<bool> device_lost_snapshot_logged{false};
+-            const u32 flip_num = DebugState.GetFrameNum();
+-            LOG_CRITICAL(Render_Vulkan, "Device lost during waiting for a frame (GetRenderFrame)");
+-            if (!device_lost_snapshot_logged.exchange(true)) {
+-                LOG_CRITICAL(Render_Vulkan,
+-                             "DEVICE_LOST_SNAPSHOT where=GetRenderFrame lastPresent={} "
+-                             "currentFrameId={} frameSize={}x{} hdr={} flipFrameNum={}",
+-                             flip_num, frame ? int(frame->id) : -1, frame ? frame->width : 0,
+-                             frame ? frame->height : 0, frame && frame->is_hdr ? 1 : 0, flip_num);
+-            }
+-            break;
+-        }
+-        if (result == vk::Result::eTimeout) {
+-            LOG_WARNING(Render_Vulkan, "waitForFences timeout in GetRenderFrame (retry {}/{})",
+-                        retry + 1, kMaxFenceWaitRetries);
+-            continue;
+-        }
++    // Never block the caller on the present fence. This function runs on the
++    // GPU/PM4 thread: any wait here delays command processing for the whole
++    // emulator. Poll with zero timeout instead; when the previous presentation
++    // has not finished yet, hand the frame back and report "not ready" so the
++    // videoout driver re-enqueues the flip on a later tick.
++    result = device.waitForFences(frame->present_done, false, 0);
++    if (result == vk::Result::eTimeout) {
++        {
++            std::scoped_lock requeue_lock{free_mutex};
++            free_queue.push(frame);
++            free_cv.notify_all();
++        }
++        static std::atomic<s64> last_requeue_log_ns{};
++        const s64 now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
++        const s64 last_ns = last_requeue_log_ns.exchange(now_ns, std::memory_order_relaxed);
++        if (last_ns == 0 || now_ns - last_ns > 1'000'000'000ll) {
++            LOG_WARNING(Render_Vulkan,
++                        "PRESENT_FENCE_BUSY slot={} requeueing flip (GPU thread kept alive)",
++                        int(frame->id));
++        }
++        return nullptr;
++    }
++    if (result == vk::Result::eErrorDeviceLost) {
++        static std::atomic<bool> device_lost_snapshot_logged{false};
++        const u32 flip_num = DebugState.GetFrameNum();
++        LOG_CRITICAL(Render_Vulkan, "Device lost during waiting for a frame (GetRenderFrame)");
++        if (!device_lost_snapshot_logged.exchange(true)) {
++            LOG_CRITICAL(Render_Vulkan,
++                         "DEVICE_LOST_SNAPSHOT where=GetRenderFrame lastPresent={} "
++                         "currentFrameId={} frameSize={}x{} hdr={} flipFrameNum={}",
++                         flip_num, frame ? int(frame->id) : -1, frame ? frame->width : 0,
++                         frame ? frame->height : 0, frame && frame->is_hdr ? 1 : 0, flip_num);
++        }
++    } else if (result != vk::Result::eSuccess) {
+         LOG_ERROR(Render_Vulkan, "Unexpected waitForFences result in GetRenderFrame: {}",
+                   vk::to_string(result));
+-        break;
+     }
+ 
+     if (frame->width != expected_frame_width || frame->height != expected_frame_height ||

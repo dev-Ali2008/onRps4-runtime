@@ -1,0 +1,29 @@
+--- a/src/core/libraries/kernel/memory.cpp
++++ b/src/core/libraries/kernel/memory.cpp
+@@ -124,6 +124,26 @@
+     }
+     auto* memory = Core::Memory::Instance();
+     memory->Free(start, len, false);
++    return ORBIS_OK;
++}
++
++s32 PS4_SYSV_ABI sceKernelReleaseFlexibleMemory(u64 start, u64 len) {
++    // Resogun (CUSA00731) calls this during boot right after mapping flexible
++    // allocations. It was previously an unresolved stub: the FEX HLE bridge
++    // returned ENOSYS and the game raised a debug exception and exited.
++    // Flexible memory is backed by the same physical allocator as direct
++    // memory on this HLE, so releasing through the direct path is correct.
++    LOG_INFO(Kernel_Vmm, "called start = {:#x}, len = {:#x}", start, len);
++    if (!Common::Is16KBAligned(start) || !Common::Is16KBAligned(len)) {
++        LOG_ERROR(Kernel_Vmm, "Misaligned start or length, start = {:#x}, length = {:#x}", start,
++                  len);
++        return ORBIS_KERNEL_ERROR_EINVAL;
++    }
++    if (len == 0) {
++        return ORBIS_OK;
++    }
++    auto* memory = Core::Memory::Instance();
++    memory->Free(start, len, true);
+     return ORBIS_OK;
+ }
+ 
