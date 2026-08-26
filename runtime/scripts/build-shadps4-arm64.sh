@@ -19,10 +19,12 @@ mkdir -p "$host_tools_dir"
 clang++ -std=c++23 "$font_embed_source" -o "$host_font_embed"
 test -x "$host_font_embed"
 sdl_patch="$project_root/runtime/patches/sdl3-winlator-x11.patch"
-if git -C "$project_root/externals/sdl3" apply --check "$sdl_patch"; then
+if git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch"; then
+  echo "SDL3 Winlator patch already applied"
+elif git -C "$project_root/externals/sdl3" apply --check "$sdl_patch"; then
   git -C "$project_root/externals/sdl3" apply "$sdl_patch"
-elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch"; then
-    echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
+else
+  echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
 fi
 
 for bachata_patch in \
@@ -41,9 +43,11 @@ for bachata_patch in \
   "$project_root/runtime/patches/shadps4-videoout-flip-requeue.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
-  if git -C "$project_root/runtime/sources/shadps4" apply --check "$bachata_patch"; then
+  if git -C "$project_root/runtime/sources/shadps4" apply --reverse --check "$bachata_patch"; then
+    echo "Bachata patch $(basename "$bachata_patch") already applied"
+  elif git -C "$project_root/runtime/sources/shadps4" apply --check "$bachata_patch"; then
     git -C "$project_root/runtime/sources/shadps4" apply "$bachata_patch"
-  elif ! git -C "$project_root/runtime/sources/shadps4" apply --reverse --check "$bachata_patch"; then
+  else
     echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly (skipping...)" >&2
   fi
 done

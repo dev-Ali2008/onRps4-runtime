@@ -33,10 +33,12 @@ fi
 llvm_ar=$(command -v llvm-ar-21 || command -v llvm-ar)
 llvm_ranlib=$(command -v llvm-ranlib-21 || command -v llvm-ranlib)
 sdl_patch="$project_root/runtime/patches/sdl3-winlator-x11.patch"
-if git -C "$project_root/externals/sdl3" apply --check "$sdl_patch"; then
+if git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch"; then
+  echo "SDL3 Winlator patch already applied"
+elif git -C "$project_root/externals/sdl3" apply --check "$sdl_patch"; then
   git -C "$project_root/externals/sdl3" apply "$sdl_patch"
-elif ! git -C "$project_root/externals/sdl3" apply --reverse --check "$sdl_patch"; then
-    echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
+else
+  echo "SDL3 Winlator patch does not apply cleanly (skipping...)" >&2
 fi
 
 # Bachata patches use paths relative to the shadPS4 source root, so they
@@ -59,9 +61,11 @@ for bachata_patch in \
   "$project_root/runtime/patches/shadps4-videoout-flip-requeue.patch" \
   "$project_root/runtime/patches/bachata-fex-hle-unimplemented-returns-zero.patch"
 do
-  if git -C "$shadps4_src_dir" apply --check "$bachata_patch"; then
+  if git -C "$shadps4_src_dir" apply --reverse --check "$bachata_patch"; then
+    echo "Bachata patch $(basename "$bachata_patch") already applied"
+  elif git -C "$shadps4_src_dir" apply --check "$bachata_patch"; then
     git -C "$shadps4_src_dir" apply "$bachata_patch"
-  elif ! git -C "$shadps4_src_dir" apply --reverse --check "$bachata_patch"; then
+  else
     echo "Bachata patch $(basename "$bachata_patch") does not apply cleanly (skipping...)" >&2
   fi
 done
