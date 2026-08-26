@@ -22,7 +22,7 @@
 +        // instead: same NID -> same address, separate NIDs stay separated,
 +        // reads observe zeros exactly like an untouched BSS object would.
 +        {
-+            static alignas(64) std::array<u8, 0x10000> unresolved_object_scratch{};
++            alignas(64) static std::array<u8, 0x10000> unresolved_object_scratch{};
 +            const std::string_view nid{sr.name};
 +            u64 hash = 1469598103934665603ull; // FNV-1a 64
 +            for (const char c : nid) {
